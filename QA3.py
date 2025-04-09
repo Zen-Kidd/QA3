@@ -456,7 +456,7 @@ def login_screen():
         password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
         if password == "admin":
             root.destroy()
-            app = placeholder()
+            app = AdminDashboard()
             app.mainloop()
         else:
             messagebox.showerror("Access Denied", "Incorrect password.")
@@ -468,6 +468,131 @@ def login_screen():
     ttk.Button(root, text="Quiz Taker Access", command=quiz_taker_access).pack(pady=10, fill=tk.X, padx=20)
     
     root.mainloop()
+
+# ----------------------------
+# Admin Dashboard and Navigation
+# ----------------------------
+
+class AdminDashboard(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Admin Dashboard")
+        self.geometry("800x600")
+        self.create_navigation()
+        self.create_frames()
+        self.show_frame("ViewQuestionsPage")
+    
+    def create_navigation(self):
+        nav_frame = ttk.Frame(self)
+        nav_frame.pack(side=tk.TOP, fill=tk.X)
+        ttk.Button(nav_frame, text="View Questions", command=lambda: self.show_frame("ViewQuestionsPage")).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(nav_frame, text="Add New Question", command=lambda: self.show_frame("AddQuestionPage")).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(nav_frame, text="Logout", command=self.logout).pack(side=tk.RIGHT, padx=5, pady=5)
+    
+    def create_frames(self):
+        self.frames = {}
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+        
+        for F in (ViewQuestionsPage, AddQuestionPage):
+            frame = F(container, self)
+            self.frames[F.__name__] = frame
+            frame.grid(row=0, column=0, sticky="nsew")
+    
+    def show_frame(self, page_name):
+        frame = self.frames[page_name]
+        frame.tkraise()
+        if page_name == "ViewQuestionsPage":
+            frame.load_questions()
+    
+    def logout(self):
+        self.destroy()
+
+class ViewQuestionsPage(ttk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+        self.course_var = tk.StringVar(value=course_tables[0])
+        
+        top_frame = ttk.Frame(self)
+        top_frame.pack(pady=10)
+        ttk.Label(top_frame, text="Select Course:").pack(side=tk.LEFT)
+        course_dropdown = ttk.OptionMenu(top_frame, self.course_var, course_tables[0], *course_tables, command=lambda _: self.load_questions())
+        course_dropdown.pack(side=tk.LEFT, padx=5)
+        
+        list_frame = ttk.Frame(self)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10)
+        self.question_listbox = tk.Listbox(list_frame, width=80)
+        self.question_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.question_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.question_listbox.config(yscrollcommand=scrollbar.set)
+        
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=10)
+        ttk.Button(btn_frame, text="Edit Selected", command=self.edit_selected_question).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Delete Selected", command=self.delete_selected_question).pack(side=tk.LEFT, padx=5)
+    
+    def load_questions(self):
+        self.question_listbox.delete(0, tk.END)
+        questions = get_questions(self.course_var.get())
+        self.questions = questions
+        for q in questions:
+            display_text = f"ID {q.qid}: {q.question[:50]}..." if len(q.question) > 50 else f"ID {q.qid}: {q.question}"
+            self.question_listbox.insert(tk.END, display_text)
+    
+    def edit_selected_question(self):
+        messagebox.showinfo("placeholder", "not implemented yet")
+    
+    def delete_selected_question(self):
+        try:
+            index = self.question_listbox.curselection()[0]
+        except IndexError:
+            messagebox.showwarning("Selection Error", "Select a question to delete.")
+            return
+        question_obj = self.questions[index]
+        if messagebox.askyesno("Confirm Delete", f"Delete question ID {question_obj.qid}?"):
+            delete_question(self.course_var.get(), question_obj.qid)
+            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted.")
+            self.load_questions()
+
+class AddQuestionPage(ttk.Frame):
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+        ttk.Label(self, text="Add New Question", font=("Arial", 16)).pack(pady=10)
+        form_frame = ttk.Frame(self)
+        form_frame.pack(pady=10)
+        ttk.Label(form_frame, text="Select Course:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        self.course_var = tk.StringVar(value=course_tables[0])
+        course_dropdown = ttk.OptionMenu(form_frame, self.course_var, course_tables[0], *course_tables)
+        course_dropdown.grid(row=0, column=1, padx=5, pady=5)
+        
+        fields = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer"]
+        self.entries = {}
+        for idx, field in enumerate(fields, start=1):
+            ttk.Label(form_frame, text=field + ":").grid(row=idx, column=0, sticky=tk.W, padx=5, pady=5)
+            entry = ttk.Entry(form_frame, width=80)
+            entry.grid(row=idx, column=1, padx=5, pady=5)
+            self.entries[field] = entry
+        
+        ttk.Button(self, text="Add Question", command=self.add_question).pack(pady=10)
+    
+    def add_question(self):
+        course = self.course_var.get()
+        q_text = self.entries["Question"].get()
+        opt_a = self.entries["Option A"].get()
+        opt_b = self.entries["Option B"].get()
+        opt_c = self.entries["Option C"].get()
+        opt_d = self.entries["Option D"].get()
+        correct = self.entries["Correct Answer"].get()
+        if not (q_text and opt_a and opt_b and opt_c and opt_d and correct):
+            messagebox.showwarning("Incomplete Data", "Please fill out all fields.")
+            return
+        add_question(course, q_text, opt_a, opt_b, opt_c, opt_d, correct)
+        messagebox.showinfo("Success", "Question added successfully.")
+        for entry in self.entries.values():
+            entry.delete(0, tk.END)
 
 # ----------------------------
 # Main Execution
