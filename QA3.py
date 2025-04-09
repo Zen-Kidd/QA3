@@ -330,19 +330,14 @@ placeholder_questions = {
 }
 
 def initialize_database():
-    """For testing, drop each table if it exists, then re-create it and insert placeholder questions."""
+    """Initialize the SQLite database by creating tables if they don't exist and inserting placeholder questions if needed."""
     conn = sqlite3.connect(DATABASE_FILENAME)
     cursor = conn.cursor()
 
-    # Drop tables if they exist (for testing/reinitialization)
-    for table in course_tables:
-        cursor.execute(f'DROP TABLE IF EXISTS "{table}";')
-        print(f"Dropped table '{table}' if it existed.")
-
-    # Create tables and insert placeholder data
+    # Instead of dropping tables, we create tables only if they do not exist.
     for table in course_tables:
         create_table_sql = f'''
-        CREATE TABLE "{table}" (
+        CREATE TABLE IF NOT EXISTS "{table}" (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             question TEXT,
             option_a TEXT,
@@ -353,17 +348,30 @@ def initialize_database():
         );
         '''
         cursor.execute(create_table_sql)
-        print(f"Table '{table}' created.")
+        print(f"Table '{table}' created or already exists.")
 
-        # Insert all 10 placeholder questions for each course.
-        if table in placeholder_questions:
-            insert_sql = f'''
-            INSERT INTO "{table}" (question, option_a, option_b, option_c, option_d, correct_answer)
-            VALUES (?, ?, ?, ?, ?, ?);
-            '''
-            cursor.executemany(insert_sql, placeholder_questions[table])
-            conn.commit()
-            print(f"Inserted placeholder questions into '{table}'.")
+        # Count the current rows in the table.
+        cursor.execute(f'SELECT COUNT(*) FROM "{table}";')
+        count = cursor.fetchone()[0]
+        print(f"'{table}' currently has {count} rows.")
+
+        # Insert placeholder questions only if the table has fewer than 10 rows.
+        if count < 10:
+            rows_to_insert = 10 - count
+            if table in placeholder_questions:
+                insert_values = placeholder_questions[table][count:count + rows_to_insert]
+                insert_sql = f'''
+                INSERT INTO "{table}" (question, option_a, option_b, option_c, option_d, correct_answer)
+                VALUES (?, ?, ?, ?, ?, ?);
+                '''
+                cursor.executemany(insert_sql, insert_values)
+                conn.commit()
+                print(f"Inserted {rows_to_insert} placeholder rows into '{table}'.")
+            else:
+                print(f"No placeholder questions defined for table '{table}'.")
+        else:
+            print(f"No new rows inserted into '{table}', already has 10 or more rows.")
+
     conn.close()
     print("Database initialization complete.")
 
@@ -381,7 +389,7 @@ def get_questions(course):
     return [Question(*row) for row in rows]
 
 def update_question(course, question_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
-    """Update a specific question in the database."""
+    """Update a specific question in the database permanently."""
     conn = sqlite3.connect(DATABASE_FILENAME)
     cursor = conn.cursor()
     update_sql = f'''
@@ -394,7 +402,7 @@ def update_question(course, question_id, question_text, option_a, option_b, opti
     conn.close()
 
 def add_question(course, question_text, option_a, option_b, option_c, option_d, correct_answer):
-    """Insert a new question into the database."""
+    """Insert a new question into the database permanently."""
     conn = sqlite3.connect(DATABASE_FILENAME)
     cursor = conn.cursor()
     insert_sql = f'''
@@ -406,13 +414,18 @@ def add_question(course, question_text, option_a, option_b, option_c, option_d, 
     conn.close()
 
 def delete_question(course, question_id):
-    """Delete a specific question from the database."""
+    """Delete a specific question from the database permanently."""
     conn = sqlite3.connect(DATABASE_FILENAME)
     cursor = conn.cursor()
     delete_sql = f'DELETE FROM "{course}" WHERE id = ?;'
     cursor.execute(delete_sql, (question_id,))
     conn.commit()
     conn.close()
+
+def can_delete_question(course):
+    """Return True if the course contains more than 10 questions; otherwise, deletion is not allowed."""
+    questions = get_questions(course)
+    return len(questions) > 10
 
 # ----------------------------
 # Question Class
@@ -437,11 +450,11 @@ class Question:
         return answer == self.correct_answer
 
 # ----------------------------
-# Edit Window (Modified to include Delete)
+# Edit Window (Modified to include Delete Prevention)
 # ----------------------------
 
 def open_edit_window(course, question_obj, refresh_callback=None):
-    """Open a window to edit or delete a selected question."""
+    """Open a window to edit or delete a selected question permanently."""
     edit_win = tk.Toplevel()
     edit_win.title(f"Edit Question ID {question_obj.qid} - {course}")
     
@@ -469,15 +482,19 @@ def open_edit_window(course, question_obj, refresh_callback=None):
         new_d = entries["Option D"].get()
         new_correct = entries["Correct Answer"].get()
         update_question(course, question_obj.qid, new_question, new_a, new_b, new_c, new_d, new_correct)
-        messagebox.showinfo("Success", f"Question ID {question_obj.qid} updated.")
+        messagebox.showinfo("Success", f"Question ID {question_obj.qid} updated permanently.")
         if refresh_callback:
             refresh_callback()
         edit_win.destroy()
     
     def delete_current():
-        if messagebox.askyesno("Confirm Delete", f"Delete question ID {question_obj.qid}?"):
+        # Prevent deletion if there are exactly 10 questions.
+        if not can_delete_question(course):
+            messagebox.showwarning("Deletion Not Allowed", "Cannot delete question because at least 10 questions must be maintained.")
+            return
+        if messagebox.askyesno("Confirm Delete", f"Delete question ID {question_obj.qid} permanently?"):
             delete_question(course, question_obj.qid)
-            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted.")
+            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted permanently.")
             if refresh_callback:
                 refresh_callback()
             edit_win.destroy()
@@ -575,10 +592,14 @@ class ViewQuestionsPage(ttk.Frame):
         except IndexError:
             messagebox.showwarning("Selection Error", "Select a question to delete.")
             return
+        # Prevent deletion if the count is at the minimum of 10.
+        if not can_delete_question(self.course_var.get()):
+            messagebox.showwarning("Deletion Not Allowed", "Cannot delete question because at least 10 questions must be maintained.")
+            return
         question_obj = self.questions[index]
         if messagebox.askyesno("Confirm Delete", f"Delete question ID {question_obj.qid}?"):
             delete_question(self.course_var.get(), question_obj.qid)
-            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted.")
+            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted permanently.")
             self.load_questions()
 
 class AddQuestionPage(ttk.Frame):
@@ -615,7 +636,7 @@ class AddQuestionPage(ttk.Frame):
             messagebox.showwarning("Incomplete Data", "Please fill out all fields.")
             return
         add_question(course, q_text, opt_a, opt_b, opt_c, opt_d, correct)
-        messagebox.showinfo("Success", "Question added successfully.")
+        messagebox.showinfo("Success", "Question added successfully and saved permanently.")
         for entry in self.entries.values():
             entry.delete(0, tk.END)
 
@@ -625,6 +646,7 @@ class AddQuestionPage(ttk.Frame):
 # Critical changes:
 # 1. Added QuizWelcomeScreen: provides a welcome and category selection screen.
 # 2. Added QuizFrame: presents questions with multiple-choice options, provides immediate feedback, and tracks score.
+# 3. Modified show_results() to add a "Return to Main Menu" button.
 
 class QuizWelcomeScreen(tk.Tk):
     def __init__(self):
@@ -732,7 +754,7 @@ def login_screen():
     
     def admin_access():
         password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
-        if password == "admin":
+        if password == "goldeneagles2025":
             root.destroy()
             app = AdminDashboard()
             app.mainloop()
@@ -756,4 +778,6 @@ def login_screen():
 if __name__ == "__main__":
     initialize_database()
     login_screen()
+
+
 
