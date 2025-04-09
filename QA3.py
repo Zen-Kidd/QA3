@@ -592,7 +592,6 @@ class ViewQuestionsPage(ttk.Frame):
         except IndexError:
             messagebox.showwarning("Selection Error", "Select a question to delete.")
             return
-        # Prevent deletion if the count is at the minimum of 10.
         if not can_delete_question(self.course_var.get()):
             messagebox.showwarning("Deletion Not Allowed", "Cannot delete question because at least 10 questions must be maintained.")
             return
@@ -610,8 +609,9 @@ class AddQuestionPage(ttk.Frame):
         form_frame = ttk.Frame(self)
         form_frame.pack(pady=10)
         ttk.Label(form_frame, text="Select Course:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        # Updated OptionMenu: include command to update self.course_var.
         self.course_var = tk.StringVar(value=course_tables[0])
-        course_dropdown = ttk.OptionMenu(form_frame, self.course_var, course_tables[0], *course_tables)
+        course_dropdown = ttk.OptionMenu(form_frame, self.course_var, self.course_var.get(), *course_tables, command=lambda value: self.course_var.set(value))
         course_dropdown.grid(row=0, column=1, padx=5, pady=5)
         
         fields = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer"]
@@ -753,6 +753,7 @@ def login_screen():
     ttk.Label(root, text="Quiz Bowl Application", font=("Arial", 18)).pack(pady=20)
     
     def admin_access():
+        # Updated admin password.
         password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
         if password == "goldeneagles2025":
             root.destroy()
