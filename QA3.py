@@ -525,6 +525,7 @@ class AdminDashboard(tk.Tk):
     
     def logout(self):
         self.destroy()
+        login_screen()
 
 class ViewQuestionsPage(ttk.Frame):
     def __init__(self, parent, controller):
@@ -657,7 +658,7 @@ class QuizFrame(tk.Frame):
         self.current_index = 0
         self.score = 0
         self.selected_option = tk.StringVar()
-        self.processing = False          # NEW FLAG: Indicates if submission is in progress.
+        self.processing = False  # Flag to prevent spam clicking.
         self.create_widgets()
         self.display_question()
 
@@ -671,7 +672,6 @@ class QuizFrame(tk.Frame):
             rb.pack(anchor=tk.W)
             self.radio_buttons[option] = rb
             
-        # Save a reference to the submit button to disable/enable it.
         self.submit_button = ttk.Button(self, text="Submit Answer", command=self.submit_answer)
         self.submit_button.pack(pady=10)
         
@@ -686,34 +686,27 @@ class QuizFrame(tk.Frame):
                 rb.config(text=f"{option}: {q.options[option]}")
             self.selected_option.set("")
             self.feedback_label.config(text="")
-            # Re-enable submit button & reset processing flag for the next question.
-            self.submit_button.config(state=tk.NORMAL)
+            # Reset the processing state and re-enable the submit button.
             self.processing = False
+            self.submit_button.config(state=tk.NORMAL)
         else:
             self.show_results()
 
     def submit_answer(self):
-        # Ignore if processing is already underway.
         if self.processing:
             return
-
         if not self.selected_option.get():
             messagebox.showwarning("No Selection", "Please select an answer.")
             return
-
-        # Set flag and disable submit button to prevent spam-clicks.
         self.processing = True
         self.submit_button.config(state=tk.DISABLED)
-
         current_q = self.questions[self.current_index]
         if current_q.validate_answer(self.selected_option.get()):
             self.feedback_label.config(text="Correct!", foreground="green")
             self.score += 1
         else:
             self.feedback_label.config(text=f"Incorrect! Correct: {current_q.correct_answer}", foreground="red")
-        
         self.current_index += 1
-        # Delay before moving on to the next question.
         self.after(1500, self.display_question)
 
     def show_results(self):
@@ -721,8 +714,10 @@ class QuizFrame(tk.Frame):
             widget.destroy()
         result_text = f"You scored {self.score} out of {len(self.questions)}."
         ttk.Label(self, text=result_text, font=("Arial", 16)).pack(pady=20)
-        ttk.Button(self, text="Close Quiz", command=self.master.destroy).pack(pady=10)
-
+        def return_to_main_menu():
+            self.master.destroy()
+            login_screen()
+        ttk.Button(self, text="Return to Main Menu", command=return_to_main_menu).pack(pady=10)
 
 # ----------------------------
 # Login Screen (Modified)
@@ -745,7 +740,6 @@ def login_screen():
             messagebox.showerror("Access Denied", "Incorrect password.")
     
     def quiz_taker_access():
-        # Launch the new QuizWelcomeScreen.
         root.destroy()
         welcome = QuizWelcomeScreen()
         welcome.mainloop()
@@ -762,3 +756,4 @@ def login_screen():
 if __name__ == "__main__":
     initialize_database()
     login_screen()
+
