@@ -440,3 +440,39 @@ class Question:
         if answer.upper() in self.options:
             return self.options[answer.upper()] == self.correct_answer
         return answer == self.correct_answer
+    
+# ----------------------------
+# Login Screen
+# ----------------------------
+
+def login_screen():
+    """Display the login screen with options for Admin Access (password protected) or Quiz Taker Access."""
+    root = tk.Tk()
+    root.title("Quiz Bowl Login")
+    root.geometry("400x300")
+    ttk.Label(root, text="Quiz Bowl Application", font=("Arial", 18)).pack(pady=20)
+    
+    def admin_access():
+        password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
+        if password == "admin":
+            root.destroy()
+            app = placeholder()
+            app.mainloop()
+        else:
+            messagebox.showerror("Access Denied", "Incorrect password.")
+    
+    def quiz_taker_access():
+        messagebox.showinfo("placeholder", "not implemented yet")
+    
+    ttk.Button(root, text="Admin Access", command=admin_access).pack(pady=10, fill=tk.X, padx=20)
+    ttk.Button(root, text="Quiz Taker Access", command=quiz_taker_access).pack(pady=10, fill=tk.X, padx=20)
+    
+    root.mainloop()
+
+# ----------------------------
+# Main Execution
+# ----------------------------
+
+if __name__ == "__main__":
+    initialize_database()
+    login_screen()
