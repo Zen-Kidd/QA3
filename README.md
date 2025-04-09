@@ -1,4 +1,4 @@
-# Quarterly Assessment #3
+# Quarterly Assessment #3 -- Quiz Bowl Application
 # Ian Neely
 # DS 3850-001
 # Due: April 13, 2025
