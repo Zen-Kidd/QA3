@@ -330,13 +330,19 @@ placeholder_questions = {
 }
 
 def initialize_database():
-    """Initialize the SQLite database, creating tables and inserting placeholders if needed."""
+    """For testing, drop each table if it exists, then re-create it and insert placeholder questions."""
     conn = sqlite3.connect(DATABASE_FILENAME)
     cursor = conn.cursor()
 
+    # Drop tables if they exist (for testing/reinitialization)
+    for table in course_tables:
+        cursor.execute(f'DROP TABLE IF EXISTS "{table}";')
+        print(f"Dropped table '{table}' if it existed.")
+
+    # Create tables and insert placeholder data
     for table in course_tables:
         create_table_sql = f'''
-        CREATE TABLE IF NOT EXISTS "{table}" (
+        CREATE TABLE "{table}" (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             question TEXT,
             option_a TEXT,
@@ -347,28 +353,17 @@ def initialize_database():
         );
         '''
         cursor.execute(create_table_sql)
-        print(f"Table '{table}' created (or already exists).")
+        print(f"Table '{table}' created.")
 
-        cursor.execute(f'SELECT COUNT(*) FROM "{table}";')
-        count = cursor.fetchone()[0]
-        print(f"'{table}' currently has {count} rows.")
-
-        if count < 10:
-            rows_to_insert = 10 - count
-            if table in placeholder_questions:
-                insert_values = placeholder_questions[table][count:count + rows_to_insert]
-                insert_sql = f'''
-                INSERT INTO "{table}" (question, option_a, option_b, option_c, option_d, correct_answer)
-                VALUES (?, ?, ?, ?, ?, ?);
-                '''
-                cursor.executemany(insert_sql, insert_values)
-                conn.commit()
-                print(f"Inserted {rows_to_insert} placeholder rows into '{table}'.")
-            else:
-                print(f"No placeholder questions defined for table '{table}'.")
-        else:
-            print(f"No new rows inserted into '{table}', already has 10 or more rows.")
-
+        # Insert all 10 placeholder questions for each course.
+        if table in placeholder_questions:
+            insert_sql = f'''
+            INSERT INTO "{table}" (question, option_a, option_b, option_c, option_d, correct_answer)
+            VALUES (?, ?, ?, ?, ?, ?);
+            '''
+            cursor.executemany(insert_sql, placeholder_questions[table])
+            conn.commit()
+            print(f"Inserted placeholder questions into '{table}'.")
     conn.close()
     print("Database initialization complete.")
 
@@ -440,37 +435,60 @@ class Question:
         if answer.upper() in self.options:
             return self.options[answer.upper()] == self.correct_answer
         return answer == self.correct_answer
-    
-# ----------------------------
-# Login Screen
-# ----------------------------
-
-def login_screen():
-    """Display the login screen with options for Admin Access (password protected) or Quiz Taker Access."""
-    root = tk.Tk()
-    root.title("Quiz Bowl Login")
-    root.geometry("400x300")
-    ttk.Label(root, text="Quiz Bowl Application", font=("Arial", 18)).pack(pady=20)
-    
-    def admin_access():
-        password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
-        if password == "admin":
-            root.destroy()
-            app = AdminDashboard()
-            app.mainloop()
-        else:
-            messagebox.showerror("Access Denied", "Incorrect password.")
-    
-    def quiz_taker_access():
-        messagebox.showinfo("placeholder", "not implemented yet")
-    
-    ttk.Button(root, text="Admin Access", command=admin_access).pack(pady=10, fill=tk.X, padx=20)
-    ttk.Button(root, text="Quiz Taker Access", command=quiz_taker_access).pack(pady=10, fill=tk.X, padx=20)
-    
-    root.mainloop()
 
 # ----------------------------
-# Admin Dashboard and Navigation
+# Edit Window (Modified to include Delete)
+# ----------------------------
+
+def open_edit_window(course, question_obj, refresh_callback=None):
+    """Open a window to edit or delete a selected question."""
+    edit_win = tk.Toplevel()
+    edit_win.title(f"Edit Question ID {question_obj.qid} - {course}")
+    
+    fields = ["Question", "Option A", "Option B", "Option C", "Option D", "Correct Answer"]
+    current_values = [question_obj.question,
+                      question_obj.options['A'],
+                      question_obj.options['B'],
+                      question_obj.options['C'],
+                      question_obj.options['D'],
+                      question_obj.correct_answer]
+    entries = {}
+    
+    for idx, field in enumerate(fields):
+        ttk.Label(edit_win, text=field + ":").grid(row=idx, column=0, sticky=tk.W, padx=5, pady=5)
+        entry = ttk.Entry(edit_win, width=80)
+        entry.insert(0, current_values[idx])
+        entry.grid(row=idx, column=1, padx=5, pady=5)
+        entries[field] = entry
+    
+    def save_changes():
+        new_question = entries["Question"].get()
+        new_a = entries["Option A"].get()
+        new_b = entries["Option B"].get()
+        new_c = entries["Option C"].get()
+        new_d = entries["Option D"].get()
+        new_correct = entries["Correct Answer"].get()
+        update_question(course, question_obj.qid, new_question, new_a, new_b, new_c, new_d, new_correct)
+        messagebox.showinfo("Success", f"Question ID {question_obj.qid} updated.")
+        if refresh_callback:
+            refresh_callback()
+        edit_win.destroy()
+    
+    def delete_current():
+        if messagebox.askyesno("Confirm Delete", f"Delete question ID {question_obj.qid}?"):
+            delete_question(course, question_obj.qid)
+            messagebox.showinfo("Deleted", f"Question ID {question_obj.qid} deleted.")
+            if refresh_callback:
+                refresh_callback()
+            edit_win.destroy()
+    
+    button_frame = ttk.Frame(edit_win)
+    button_frame.grid(row=len(fields), column=0, columnspan=2, pady=10)
+    ttk.Button(button_frame, text="Save Changes", command=save_changes).pack(side=tk.LEFT, padx=5)
+    ttk.Button(button_frame, text="Delete Question", command=delete_current).pack(side=tk.LEFT, padx=5)
+
+# ----------------------------
+# Admin Dashboard and Navigation (New)
 # ----------------------------
 
 class AdminDashboard(tk.Tk):
@@ -542,7 +560,13 @@ class ViewQuestionsPage(ttk.Frame):
             self.question_listbox.insert(tk.END, display_text)
     
     def edit_selected_question(self):
-        messagebox.showinfo("placeholder", "not implemented yet")
+        try:
+            index = self.question_listbox.curselection()[0]
+        except IndexError:
+            messagebox.showwarning("Selection Error", "Select a question to edit.")
+            return
+        question_obj = self.questions[index]
+        open_edit_window(self.course_var.get(), question_obj, refresh_callback=self.load_questions)
     
     def delete_selected_question(self):
         try:
@@ -593,6 +617,127 @@ class AddQuestionPage(ttk.Frame):
         messagebox.showinfo("Success", "Question added successfully.")
         for entry in self.entries.values():
             entry.delete(0, tk.END)
+
+# ----------------------------
+# New: User Quiz Interface
+# ----------------------------
+# Critical changes:
+# 1. Added QuizWelcomeScreen: provides a welcome and category selection screen.
+# 2. Added QuizFrame: presents questions with multiple-choice options, provides immediate feedback, and tracks score.
+
+class QuizWelcomeScreen(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Quiz Taker Welcome Screen")
+        self.geometry("400x300")
+        ttk.Label(self, text="Welcome to the Quiz!", font=("Arial", 18)).pack(pady=20)
+        ttk.Label(self, text="Select a Quiz Category:").pack(pady=10)
+        self.category_var = tk.StringVar(value=course_tables[0])
+        category_dropdown = ttk.OptionMenu(self, self.category_var, course_tables[0], *course_tables)
+        category_dropdown.pack(pady=10)
+        ttk.Button(self, text="Start Quiz", command=self.start_quiz).pack(pady=20)
+        
+    def start_quiz(self):
+        selected_course = self.category_var.get()
+        self.destroy()  # Close the welcome screen
+        quiz_win = tk.Tk()
+        quiz_win.title(f"Quiz - {selected_course}")
+        quiz_win.geometry("600x400")
+        questions = get_questions(selected_course)
+        quiz_frame = QuizFrame(quiz_win, selected_course, questions)
+        quiz_frame.pack(fill=tk.BOTH, expand=True)
+        quiz_win.mainloop()
+
+class QuizFrame(tk.Frame):
+    def __init__(self, master, course, questions):
+        super().__init__(master)
+        self.master = master
+        self.course = course
+        self.questions = questions
+        self.current_index = 0
+        self.score = 0
+        self.selected_option = tk.StringVar()
+        self.create_widgets()
+        self.display_question()
+
+    def create_widgets(self):
+        self.question_label = ttk.Label(self, wraplength=500, justify=tk.LEFT)
+        self.question_label.pack(pady=10)
+        
+        self.radio_buttons = {}
+        for option in ['A', 'B', 'C', 'D']:
+            rb = ttk.Radiobutton(self, text="", variable=self.selected_option, value=option)
+            rb.pack(anchor=tk.W)
+            self.radio_buttons[option] = rb
+            
+        self.submit_button = ttk.Button(self, text="Submit Answer", command=self.submit_answer)
+        self.submit_button.pack(pady=10)
+        
+        self.feedback_label = ttk.Label(self, text="")
+        self.feedback_label.pack(pady=5)
+
+    def display_question(self):
+        if self.current_index < len(self.questions):
+            q = self.questions[self.current_index]
+            self.question_label.config(text=f"Q{self.current_index + 1}: {q.question}")
+            for option, rb in self.radio_buttons.items():
+                rb.config(text=f"{option}: {q.options[option]}")
+            # Reset the selection so that radio buttons show an empty state.
+            self.selected_option.set("")
+            self.feedback_label.config(text="")
+        else:
+            self.show_results()
+
+    def submit_answer(self):
+        if not self.selected_option.get():
+            messagebox.showwarning("No Selection", "Please select an answer.")
+            return
+        current_q = self.questions[self.current_index]
+        if current_q.validate_answer(self.selected_option.get()):
+            self.feedback_label.config(text="Correct!", foreground="green")
+            self.score += 1
+        else:
+            self.feedback_label.config(text=f"Incorrect! Correct: {current_q.correct_answer}", foreground="red")
+        self.current_index += 1
+        self.after(1500, self.display_question)
+
+    def show_results(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+        result_text = f"You scored {self.score} out of {len(self.questions)}."
+        ttk.Label(self, text=result_text, font=("Arial", 16)).pack(pady=20)
+        ttk.Button(self, text="Close Quiz", command=self.master.destroy).pack(pady=10)
+
+# ----------------------------
+# Login Screen (Modified)
+# ----------------------------
+
+def login_screen():
+    """Display the login screen with options for Admin Access or Quiz Taker Access."""
+    root = tk.Tk()
+    root.title("Quiz Bowl Login")
+    root.geometry("400x300")
+    ttk.Label(root, text="Quiz Bowl Application", font=("Arial", 18)).pack(pady=20)
+    
+    def admin_access():
+        password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
+        if password == "admin":
+            root.destroy()
+            app = AdminDashboard()
+            app.mainloop()
+        else:
+            messagebox.showerror("Access Denied", "Incorrect password.")
+    
+    def quiz_taker_access():
+        # Launch the new QuizWelcomeScreen.
+        root.destroy()
+        welcome = QuizWelcomeScreen()
+        welcome.mainloop()
+    
+    ttk.Button(root, text="Admin Access", command=admin_access).pack(pady=10, fill=tk.X, padx=20)
+    ttk.Button(root, text="Quiz Taker Access", command=quiz_taker_access).pack(pady=10, fill=tk.X, padx=20)
+    
+    root.mainloop()
 
 # ----------------------------
 # Main Execution
