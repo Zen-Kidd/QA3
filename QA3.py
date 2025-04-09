@@ -1,22 +1,15 @@
-#Ian Neely
-#Quarterly Assessment 3
-#DS 3850-001
-#Due: April 13, 2025
-
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-# ----------------------------
-# Database Setup & Placeholders
-# ----------------------------
-
+# ---------------
+# Database Setup
+# ---------------
 DATABASE_FILENAME = "quiz_bowl.db"
 course_tables = ["ACCT-2110", "DS-3850", "DS-3860", "ECON-2020", "ECON-3610"]
 
-# Updated placeholder questions for each course.
 # Each tuple: (question, option_a, option_b, option_c, option_d, correct_answer)
-placeholder_questions = {
+course_questions = {
     "ACCT-2110": [
         ("[ACCT-2110 Q1] What is the accounting equation?",
          "Assets = Liabilities + Equity",
@@ -355,11 +348,11 @@ def initialize_database():
         count = cursor.fetchone()[0]
         print(f"'{table}' currently has {count} rows.")
 
-        # Insert placeholder questions only if the table has fewer than 10 rows.
+        # Insert placeholder questions only if the table has fewer than 10 rows. THIS IS IN CASE IF TABLE MANAGED TO BYPASS >=10 BLOCK
         if count < 10:
             rows_to_insert = 10 - count
-            if table in placeholder_questions:
-                insert_values = placeholder_questions[table][count:count + rows_to_insert]
+            if table in course_questions:
+                insert_values = course_questions[table][count:count + rows_to_insert]
                 insert_sql = f'''
                 INSERT INTO "{table}" (question, option_a, option_b, option_c, option_d, correct_answer)
                 VALUES (?, ?, ?, ?, ?, ?);
@@ -427,9 +420,9 @@ def can_delete_question(course):
     questions = get_questions(course)
     return len(questions) > 10
 
-# ----------------------------
+# ---------------
 # Question Class
-# ----------------------------
+# ---------------
 
 class Question:
     def __init__(self, qid, question, option_a, option_b, option_c, option_d, correct_answer):
@@ -449,9 +442,9 @@ class Question:
             return self.options[answer.upper()] == self.correct_answer
         return answer == self.correct_answer
 
-# ----------------------------
-# Edit Window (Modified to include Delete Prevention)
-# ----------------------------
+# -------------
+# Edit Window 
+# -------------
 
 def open_edit_window(course, question_obj, refresh_callback=None):
     """Open a window to edit or delete a selected question permanently."""
@@ -504,9 +497,9 @@ def open_edit_window(course, question_obj, refresh_callback=None):
     ttk.Button(button_frame, text="Save Changes", command=save_changes).pack(side=tk.LEFT, padx=5)
     ttk.Button(button_frame, text="Delete Question", command=delete_current).pack(side=tk.LEFT, padx=5)
 
-# ----------------------------
-# Admin Dashboard and Navigation (New)
-# ----------------------------
+# ------------------------------
+# Admin Dashboard and Navigation
+# ------------------------------
 
 class AdminDashboard(tk.Tk):
     def __init__(self):
@@ -640,13 +633,9 @@ class AddQuestionPage(ttk.Frame):
         for entry in self.entries.values():
             entry.delete(0, tk.END)
 
-# ----------------------------
-# New: User Quiz Interface
-# ----------------------------
-# Critical changes:
-# 1. Added QuizWelcomeScreen: provides a welcome and category selection screen.
-# 2. Added QuizFrame: presents questions with multiple-choice options, provides immediate feedback, and tracks score.
-# 3. Modified show_results() to add a "Return to Main Menu" button.
+# --------------------
+# User Quiz Interface
+# --------------------
 
 class QuizWelcomeScreen(tk.Tk):
     def __init__(self):
@@ -741,9 +730,9 @@ class QuizFrame(tk.Frame):
             login_screen()
         ttk.Button(self, text="Return to Main Menu", command=return_to_main_menu).pack(pady=10)
 
-# ----------------------------
-# Login Screen (Modified)
-# ----------------------------
+# -------------
+# Login Screen
+# -------------
 
 def login_screen():
     """Display the login screen with options for Admin Access or Quiz Taker Access."""
@@ -753,7 +742,6 @@ def login_screen():
     ttk.Label(root, text="Quiz Bowl Application", font=("Arial", 18)).pack(pady=20)
     
     def admin_access():
-        # Updated admin password.
         password = simpledialog.askstring("Admin Login", "Enter admin password:", show="*")
         if password == "goldeneagles2025":
             root.destroy()
@@ -772,9 +760,9 @@ def login_screen():
     
     root.mainloop()
 
-# ----------------------------
+# ---------------
 # Main Execution
-# ----------------------------
+# ---------------
 
 if __name__ == "__main__":
     initialize_database()
