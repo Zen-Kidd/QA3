@@ -372,4 +372,71 @@ def initialize_database():
     conn.close()
     print("Database initialization complete.")
 
+# ----------------------------
+# Database Helper Functions (Updated)
+# ----------------------------
 
+def get_questions(course):
+    """Retrieve all questions for a given course as a list of Question objects."""
+    conn = sqlite3.connect(DATABASE_FILENAME)
+    cursor = conn.cursor()
+    cursor.execute(f'SELECT id, question, option_a, option_b, option_c, option_d, correct_answer FROM "{course}" ORDER BY id ASC;')
+    rows = cursor.fetchall()
+    conn.close()
+    return [Question(*row) for row in rows]
+
+def update_question(course, question_id, question_text, option_a, option_b, option_c, option_d, correct_answer):
+    """Update a specific question in the database."""
+    conn = sqlite3.connect(DATABASE_FILENAME)
+    cursor = conn.cursor()
+    update_sql = f'''
+    UPDATE "{course}"
+    SET question = ?, option_a = ?, option_b = ?, option_c = ?, option_d = ?, correct_answer = ?
+    WHERE id = ?;
+    '''
+    cursor.execute(update_sql, (question_text, option_a, option_b, option_c, option_d, correct_answer, question_id))
+    conn.commit()
+    conn.close()
+
+def add_question(course, question_text, option_a, option_b, option_c, option_d, correct_answer):
+    """Insert a new question into the database."""
+    conn = sqlite3.connect(DATABASE_FILENAME)
+    cursor = conn.cursor()
+    insert_sql = f'''
+    INSERT INTO "{course}" (question, option_a, option_b, option_c, option_d, correct_answer)
+    VALUES (?, ?, ?, ?, ?, ?);
+    '''
+    cursor.execute(insert_sql, (question_text, option_a, option_b, option_c, option_d, correct_answer))
+    conn.commit()
+    conn.close()
+
+def delete_question(course, question_id):
+    """Delete a specific question from the database."""
+    conn = sqlite3.connect(DATABASE_FILENAME)
+    cursor = conn.cursor()
+    delete_sql = f'DELETE FROM "{course}" WHERE id = ?;'
+    cursor.execute(delete_sql, (question_id,))
+    conn.commit()
+    conn.close()
+
+# ----------------------------
+# Question Class
+# ----------------------------
+
+class Question:
+    def __init__(self, qid, question, option_a, option_b, option_c, option_d, correct_answer):
+        self.qid = qid
+        self.question = question
+        self.options = {
+            'A': option_a,
+            'B': option_b,
+            'C': option_c,
+            'D': option_d
+        }
+        self.correct_answer = correct_answer.strip()
+
+    def validate_answer(self, given_answer):
+        answer = given_answer.strip()
+        if answer.upper() in self.options:
+            return self.options[answer.upper()] == self.correct_answer
+        return answer == self.correct_answer
